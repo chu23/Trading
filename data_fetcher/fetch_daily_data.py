@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import random
 import time
 from pathlib import Path
 
@@ -153,7 +154,7 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
         except Exception as exc:  # pragma: no cover - basic logging
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
-            time.sleep(sleep)
+            time.sleep(random.uniform(sleep * 0.5, sleep * 1.5))
         if idx % 100 == 0 or idx == total_symbols:
             percent = (idx / total_symbols) * 100 if total_symbols else 100
             print(
@@ -167,7 +168,7 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
 
 def parse_args() -> argparse.Namespace:
     today = dt.date.today()
-    default_start = (today - dt.timedelta(days=365)).strftime("%Y%m%d")
+    default_start = (today - dt.timedelta(days=365 * 5)).strftime("%Y%m%d")
     default_end = today.strftime("%Y%m%d")
 
     parser = argparse.ArgumentParser(description="Fetch A-share daily data via akshare")
