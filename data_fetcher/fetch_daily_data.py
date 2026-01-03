@@ -10,6 +10,11 @@ import akshare as ak
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "market_daily"
+<<<<<<< ours
+=======
+SNAPSHOT_PATH = DATA_DIR / "symbols_snapshot.json"
+CHANGELOG_PATH = DATA_DIR / "market_symbols_log.md"
+>>>>>>> theirs
 
 
 def fetch_symbols() -> pd.DataFrame:
@@ -35,6 +40,7 @@ def save_symbol_data(symbol: str, data: pd.DataFrame, output_dir: Path) -> Path:
     return file_path
 
 
+<<<<<<< ours
 def update_all_symbols(start: str, end: str, sleep: float) -> None:
     symbols_df = fetch_symbols()
     symbols = symbols_df["代码"].dropna().astype(str).tolist()
@@ -45,12 +51,139 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
             if data.empty:
                 continue
             save_symbol_data(symbol, data, DATA_DIR)
+=======
+def load_symbol_snapshot() -> set[str]:
+    if not SNAPSHOT_PATH.exists():
+        return set()
+    return set(pd.read_json(SNAPSHOT_PATH)["symbols"].astype(str).tolist())
+
+
+def save_symbol_snapshot(symbols: list[str]) -> None:
+    snapshot = pd.DataFrame({"symbols": sorted(set(symbols))})
+    SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.to_json(SNAPSHOT_PATH, orient="records", force_ascii=False, indent=2)
+
+
+def log_symbol_changes(run_date: str, added: set[str], removed: set[str]) -> None:
+    CHANGELOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        f"## {run_date}",
+        "",
+        f"- 新增股票: {', '.join(sorted(added)) if added else '无'}",
+        f"- 退市股票: {', '.join(sorted(removed)) if removed else '无'}",
+        "",
+    ]
+    with CHANGELOG_PATH.open("a", encoding="utf-8") as file_handle:
+        file_handle.write("\n".join(lines))
+
+
+def parse_date(value: str) -> dt.date:
+    return dt.datetime.strptime(value, "%Y%m%d").date()
+
+
+def format_date(value: dt.date) -> str:
+    return value.strftime("%Y%m%d")
+
+
+def get_existing_last_date(file_path: Path) -> dt.date | None:
+    if not file_path.exists():
+        return None
+    try:
+        df = pd.read_csv(file_path)
+    except Exception:
+        return None
+    if df.empty or "日期" not in df.columns:
+        return None
+    dates = pd.to_datetime(df["日期"], errors="coerce").dropna()
+    if dates.empty:
+        return None
+    return dates.max().date()
+
+
+def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
+    file_path = DATA_DIR / f"{symbol}.csv"
+    existing_rows = 0
+    new_rows = 0
+    last_date = get_existing_last_date(file_path)
+    end_date = parse_date(end)
+    if last_date and last_date >= end_date:
+        if file_path.exists():
+            try:
+                existing_rows = len(pd.read_csv(file_path))
+            except Exception:
+                existing_rows = 0
+        return existing_rows, 0
+
+    if last_date:
+        start_date = max(parse_date(start), last_date + dt.timedelta(days=1))
+        start = format_date(start_date)
+
+    data = fetch_daily(symbol, start, end)
+    if data.empty:
+        if file_path.exists():
+            try:
+                existing_rows = len(pd.read_csv(file_path))
+            except Exception:
+                existing_rows = 0
+        return existing_rows, 0
+
+    new_rows = len(data)
+
+    if file_path.exists():
+        existing = pd.read_csv(file_path)
+        existing_rows = len(existing)
+        merged = pd.concat([existing, data], ignore_index=True)
+        if "日期" in merged.columns:
+            merged["日期"] = pd.to_datetime(merged["日期"], errors="coerce")
+            merged = merged.dropna(subset=["日期"]).sort_values("日期")
+            merged["日期"] = merged["日期"].dt.strftime("%Y-%m-%d")
+            merged = merged.drop_duplicates(subset=["日期"], keep="last")
+        save_symbol_data(symbol, merged, DATA_DIR)
+    else:
+        save_symbol_data(symbol, data, DATA_DIR)
+    return existing_rows, new_rows
+
+
+def update_all_symbols(start: str, end: str, sleep: float) -> None:
+    print(f"Data files will be saved to: {DATA_DIR.resolve()}")
+    symbols_df = fetch_symbols()
+    symbols = symbols_df["代码"].dropna().astype(str).tolist()
+
+    previous_symbols = load_symbol_snapshot()
+    current_symbols = set(symbols)
+    added = current_symbols - previous_symbols
+    removed = previous_symbols - current_symbols
+    log_symbol_changes(dt.date.today().strftime("%Y-%m-%d"), added, removed)
+    save_symbol_snapshot(symbols)
+
+    total_existing = 0
+    total_new = 0
+    total_symbols = len(symbols)
+
+    for idx, symbol in enumerate(symbols, start=1):
+        try:
+            existing_rows, new_rows = update_symbol_data(symbol, start, end)
+            total_existing += existing_rows
+            total_new += new_rows
+>>>>>>> theirs
         except Exception as exc:  # pragma: no cover - basic logging
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
             time.sleep(sleep)
+<<<<<<< ours
         if idx % 200 == 0:
             print(f"Processed {idx}/{len(symbols)} symbols")
+=======
+        if idx % 100 == 0 or idx == total_symbols:
+            percent = (idx / total_symbols) * 100 if total_symbols else 100
+            print(
+                "Progress:"
+                f" {idx}/{total_symbols} symbols"
+                f" ({percent:.1f}%) |"
+                f" existing rows {total_existing} |"
+                f" new rows {total_new}"
+            )
+>>>>>>> theirs
 
 
 def parse_args() -> argparse.Namespace:
