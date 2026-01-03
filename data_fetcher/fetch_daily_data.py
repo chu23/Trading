@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import random
 import time
 from pathlib import Path
 
@@ -10,11 +11,10 @@ import akshare as ak
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "market_daily"
-<<<<<<< ours
-=======
 SNAPSHOT_PATH = DATA_DIR / "symbols_snapshot.json"
 CHANGELOG_PATH = DATA_DIR / "market_symbols_log.md"
->>>>>>> theirs
+ALT_SCREEN_ENTER = "\033[?1049h"
+ALT_SCREEN_EXIT = "\033[?1049l"
 
 
 def fetch_symbols() -> pd.DataFrame:
@@ -40,18 +40,6 @@ def save_symbol_data(symbol: str, data: pd.DataFrame, output_dir: Path) -> Path:
     return file_path
 
 
-<<<<<<< ours
-def update_all_symbols(start: str, end: str, sleep: float) -> None:
-    symbols_df = fetch_symbols()
-    symbols = symbols_df["代码"].dropna().astype(str).tolist()
-
-    for idx, symbol in enumerate(symbols, start=1):
-        try:
-            data = fetch_daily(symbol, start, end)
-            if data.empty:
-                continue
-            save_symbol_data(symbol, data, DATA_DIR)
-=======
 def load_symbol_snapshot() -> set[str]:
     if not SNAPSHOT_PATH.exists():
         return set()
@@ -89,15 +77,39 @@ def get_existing_last_date(file_path: Path) -> dt.date | None:
     if not file_path.exists():
         return None
     try:
-        df = pd.read_csv(file_path)
+        with file_path.open("r", encoding="utf-8") as handle:
+            header = handle.readline().strip()
+            if not header:
+                return None
+            columns = header.split(",")
+            if "日期" not in columns:
+                return None
+            date_index = columns.index("日期")
+
+            handle.seek(0, 2)
+            position = handle.tell()
+            if position <= len(header):
+                return None
+            buffer = ""
+            while position > 0:
+                position -= 1
+                handle.seek(position)
+                char = handle.read(1)
+                if char == "\n" and buffer:
+                    break
+                buffer = char + buffer
+            last_line = buffer.strip()
+            if not last_line or last_line == header:
+                return None
+            values = last_line.split(",")
+            if date_index >= len(values):
+                return None
+            last_date = pd.to_datetime(values[date_index], errors="coerce")
+            if pd.isna(last_date):
+                return None
+            return last_date.date()
     except Exception:
         return None
-    if df.empty or "日期" not in df.columns:
-        return None
-    dates = pd.to_datetime(df["日期"], errors="coerce").dropna()
-    if dates.empty:
-        return None
-    return dates.max().date()
 
 
 def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
@@ -107,12 +119,7 @@ def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
     last_date = get_existing_last_date(file_path)
     end_date = parse_date(end)
     if last_date and last_date >= end_date:
-        if file_path.exists():
-            try:
-                existing_rows = len(pd.read_csv(file_path))
-            except Exception:
-                existing_rows = 0
-        return existing_rows, 0
+        return 0, 0
 
     if last_date:
         start_date = max(parse_date(start), last_date + dt.timedelta(days=1))
@@ -120,12 +127,7 @@ def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
 
     data = fetch_daily(symbol, start, end)
     if data.empty:
-        if file_path.exists():
-            try:
-                existing_rows = len(pd.read_csv(file_path))
-            except Exception:
-                existing_rows = 0
-        return existing_rows, 0
+        return 0, 0
 
     new_rows = len(data)
 
@@ -165,16 +167,11 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
             existing_rows, new_rows = update_symbol_data(symbol, start, end)
             total_existing += existing_rows
             total_new += new_rows
->>>>>>> theirs
         except Exception as exc:  # pragma: no cover - basic logging
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
-            time.sleep(sleep)
-<<<<<<< ours
-        if idx % 200 == 0:
-            print(f"Processed {idx}/{len(symbols)} symbols")
-=======
-        if idx % 100 == 0 or idx == total_symbols:
+            time.sleep(random.uniform(sleep * 0.5, sleep * 1.5))
+        if idx % 10 == 0 or idx == total_symbols:
             percent = (idx / total_symbols) * 100 if total_symbols else 100
             print(
                 "Progress:"
@@ -183,12 +180,11 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
                 f" existing rows {total_existing} |"
                 f" new rows {total_new}"
             )
->>>>>>> theirs
 
 
 def parse_args() -> argparse.Namespace:
     today = dt.date.today()
-    default_start = (today - dt.timedelta(days=365)).strftime("%Y%m%d")
+    default_start = (today - dt.timedelta(days=365 * 5)).strftime("%Y%m%d")
     default_end = today.strftime("%Y%m%d")
 
     parser = argparse.ArgumentParser(description="Fetch A-share daily data via akshare")
@@ -198,9 +194,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def enter_alt_screen() -> None:
+    print(ALT_SCREEN_ENTER, end="", flush=True)
+
+
+def exit_alt_screen() -> None:
+    print(ALT_SCREEN_EXIT, end="", flush=True)
+
+
 def main() -> None:
     args = parse_args()
-    update_all_symbols(args.start, args.end, args.sleep)
+    enter_alt_screen()
+    try:
+        update_all_symbols(args.start, args.end, args.sleep)
+    finally:
+        exit_alt_screen()
 
 
 if __name__ == "__main__":
