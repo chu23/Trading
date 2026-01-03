@@ -13,6 +13,8 @@ import pandas as pd
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "market_daily"
 SNAPSHOT_PATH = DATA_DIR / "symbols_snapshot.json"
 CHANGELOG_PATH = DATA_DIR / "market_symbols_log.md"
+ALT_SCREEN_ENTER = "\033[?1049h"
+ALT_SCREEN_EXIT = "\033[?1049l"
 
 
 def fetch_symbols() -> pd.DataFrame:
@@ -155,7 +157,7 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
             time.sleep(random.uniform(sleep * 0.5, sleep * 1.5))
-        if idx % 100 == 0 or idx == total_symbols:
+        if idx % 10 == 0 or idx == total_symbols:
             percent = (idx / total_symbols) * 100 if total_symbols else 100
             print(
                 "Progress:"
@@ -178,9 +180,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def enter_alt_screen() -> None:
+    print(ALT_SCREEN_ENTER, end="", flush=True)
+
+
+def exit_alt_screen() -> None:
+    print(ALT_SCREEN_EXIT, end="", flush=True)
+
+
 def main() -> None:
     args = parse_args()
-    update_all_symbols(args.start, args.end, args.sleep)
+    enter_alt_screen()
+    try:
+        update_all_symbols(args.start, args.end, args.sleep)
+    finally:
+        exit_alt_screen()
 
 
 if __name__ == "__main__":
