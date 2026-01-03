@@ -77,15 +77,39 @@ def get_existing_last_date(file_path: Path) -> dt.date | None:
     if not file_path.exists():
         return None
     try:
-        df = pd.read_csv(file_path)
+        with file_path.open("r", encoding="utf-8") as handle:
+            header = handle.readline().strip()
+            if not header:
+                return None
+            columns = header.split(",")
+            if "日期" not in columns:
+                return None
+            date_index = columns.index("日期")
+
+            handle.seek(0, 2)
+            position = handle.tell()
+            if position <= len(header):
+                return None
+            buffer = ""
+            while position > 0:
+                position -= 1
+                handle.seek(position)
+                char = handle.read(1)
+                if char == "\n" and buffer:
+                    break
+                buffer = char + buffer
+            last_line = buffer.strip()
+            if not last_line or last_line == header:
+                return None
+            values = last_line.split(",")
+            if date_index >= len(values):
+                return None
+            last_date = pd.to_datetime(values[date_index], errors="coerce")
+            if pd.isna(last_date):
+                return None
+            return last_date.date()
     except Exception:
         return None
-    if df.empty or "日期" not in df.columns:
-        return None
-    dates = pd.to_datetime(df["日期"], errors="coerce").dropna()
-    if dates.empty:
-        return None
-    return dates.max().date()
 
 
 def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
@@ -95,12 +119,7 @@ def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
     last_date = get_existing_last_date(file_path)
     end_date = parse_date(end)
     if last_date and last_date >= end_date:
-        if file_path.exists():
-            try:
-                existing_rows = len(pd.read_csv(file_path))
-            except Exception:
-                existing_rows = 0
-        return existing_rows, 0
+        return 0, 0
 
     if last_date:
         start_date = max(parse_date(start), last_date + dt.timedelta(days=1))
@@ -108,12 +127,7 @@ def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
 
     data = fetch_daily(symbol, start, end)
     if data.empty:
-        if file_path.exists():
-            try:
-                existing_rows = len(pd.read_csv(file_path))
-            except Exception:
-                existing_rows = 0
-        return existing_rows, 0
+        return 0, 0
 
     new_rows = len(data)
 
