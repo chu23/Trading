@@ -85,12 +85,19 @@ def get_existing_last_date(file_path: Path) -> dt.date | None:
     return dates.max().date()
 
 
-def update_symbol_data(symbol: str, start: str, end: str) -> None:
+def update_symbol_data(symbol: str, start: str, end: str) -> tuple[int, int]:
     file_path = DATA_DIR / f"{symbol}.csv"
+    existing_rows = 0
+    new_rows = 0
     last_date = get_existing_last_date(file_path)
     end_date = parse_date(end)
     if last_date and last_date >= end_date:
-        return
+        if file_path.exists():
+            try:
+                existing_rows = len(pd.read_csv(file_path))
+            except Exception:
+                existing_rows = 0
+        return existing_rows, 0
 
     if last_date:
         start_date = max(parse_date(start), last_date + dt.timedelta(days=1))
@@ -98,10 +105,18 @@ def update_symbol_data(symbol: str, start: str, end: str) -> None:
 
     data = fetch_daily(symbol, start, end)
     if data.empty:
-        return
+        if file_path.exists():
+            try:
+                existing_rows = len(pd.read_csv(file_path))
+            except Exception:
+                existing_rows = 0
+        return existing_rows, 0
+
+    new_rows = len(data)
 
     if file_path.exists():
         existing = pd.read_csv(file_path)
+        existing_rows = len(existing)
         merged = pd.concat([existing, data], ignore_index=True)
         if "日期" in merged.columns:
             merged["日期"] = pd.to_datetime(merged["日期"], errors="coerce")
@@ -111,9 +126,11 @@ def update_symbol_data(symbol: str, start: str, end: str) -> None:
         save_symbol_data(symbol, merged, DATA_DIR)
     else:
         save_symbol_data(symbol, data, DATA_DIR)
+    return existing_rows, new_rows
 
 
 def update_all_symbols(start: str, end: str, sleep: float) -> None:
+    print(f"Data files will be saved to: {DATA_DIR.resolve()}")
     symbols_df = fetch_symbols()
     symbols = symbols_df["代码"].dropna().astype(str).tolist()
 
@@ -124,15 +141,28 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
     log_symbol_changes(dt.date.today().strftime("%Y-%m-%d"), added, removed)
     save_symbol_snapshot(symbols)
 
+    total_existing = 0
+    total_new = 0
+    total_symbols = len(symbols)
+
     for idx, symbol in enumerate(symbols, start=1):
         try:
-            update_symbol_data(symbol, start, end)
+            existing_rows, new_rows = update_symbol_data(symbol, start, end)
+            total_existing += existing_rows
+            total_new += new_rows
         except Exception as exc:  # pragma: no cover - basic logging
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
             time.sleep(sleep)
-        if idx % 200 == 0:
-            print(f"Processed {idx}/{len(symbols)} symbols")
+        if idx % 100 == 0 or idx == total_symbols:
+            percent = (idx / total_symbols) * 100 if total_symbols else 100
+            print(
+                "Progress:"
+                f" {idx}/{total_symbols} symbols"
+                f" ({percent:.1f}%) |"
+                f" existing rows {total_existing} |"
+                f" new rows {total_new}"
+            )
 
 
 def parse_args() -> argparse.Namespace:
