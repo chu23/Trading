@@ -10,11 +10,8 @@ import akshare as ak
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "market_daily"
-<<<<<<< ours
-=======
 SNAPSHOT_PATH = DATA_DIR / "symbols_snapshot.json"
 CHANGELOG_PATH = DATA_DIR / "market_symbols_log.md"
->>>>>>> theirs
 
 
 def fetch_symbols() -> pd.DataFrame:
@@ -40,18 +37,6 @@ def save_symbol_data(symbol: str, data: pd.DataFrame, output_dir: Path) -> Path:
     return file_path
 
 
-<<<<<<< ours
-def update_all_symbols(start: str, end: str, sleep: float) -> None:
-    symbols_df = fetch_symbols()
-    symbols = symbols_df["代码"].dropna().astype(str).tolist()
-
-    for idx, symbol in enumerate(symbols, start=1):
-        try:
-            data = fetch_daily(symbol, start, end)
-            if data.empty:
-                continue
-            save_symbol_data(symbol, data, DATA_DIR)
-=======
 def load_symbol_snapshot() -> set[str]:
     if not SNAPSHOT_PATH.exists():
         return set()
@@ -165,15 +150,10 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
             existing_rows, new_rows = update_symbol_data(symbol, start, end)
             total_existing += existing_rows
             total_new += new_rows
->>>>>>> theirs
         except Exception as exc:  # pragma: no cover - basic logging
             print(f"[WARN] {symbol} failed: {exc}")
         if sleep > 0:
             time.sleep(sleep)
-<<<<<<< ours
-        if idx % 200 == 0:
-            print(f"Processed {idx}/{len(symbols)} symbols")
-=======
         if idx % 100 == 0 or idx == total_symbols:
             percent = (idx / total_symbols) * 100 if total_symbols else 100
             print(
@@ -183,7 +163,6 @@ def update_all_symbols(start: str, end: str, sleep: float) -> None:
                 f" existing rows {total_existing} |"
                 f" new rows {total_new}"
             )
->>>>>>> theirs
 
 
 def parse_args() -> argparse.Namespace:
